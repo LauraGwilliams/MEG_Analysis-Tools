@@ -10,6 +10,7 @@
 
 from __future__ import division
 
+import mne
 import numpy as np
 import scipy as sp
 from mne import create_info
@@ -191,7 +192,7 @@ def scorer_spearman(y_true, y_pred):
     rho, p = spearmanr(y_true[sel], y_pred[sel])
     return rho
 
-def decode_MEG(X, y_true, categorical_continuous, scorer=mean_squared_error,
+def decode_MEG(X, y, categorical_continuous, scorer=mean_squared_error,
                 subset_labels=None, decoder=GeneralizationAcrossTime):
 
     """
