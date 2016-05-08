@@ -19,7 +19,7 @@ from mne.datasets import sample
 from sklearn.svm import LinearSVR
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, accuracy_score
 from sklearn.cross_validation import KFold
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
@@ -192,8 +192,9 @@ def scorer_spearman(y_true, y_pred):
     rho, p = spearmanr(y_true[sel], y_pred[sel])
     return rho
 
-def decode_MEG(X, y, categorical_continuous, scorer=mean_squared_error,
-                subset_labels=None, decoder=GeneralizationAcrossTime):
+def decode_MEG(X_train, y, categorical_continuous, scorer=mean_squared_error,
+                subset_labels=None, decoder=GeneralizationAcrossTime,
+                X_predict='X_train',save_dest=None):
 
     """
     Runs GAT classifier on source or space data, on binary or continuous variables.
@@ -221,8 +222,12 @@ def decode_MEG(X, y, categorical_continuous, scorer=mean_squared_error,
         ld = decoder(predict_mode='cross-validation', n_jobs=-1, scorer=scorer)
 
     # fit the classifier, predict y, and get scores.
-    ld.fit(X, y=y)
-    ld.predict(X)
+    ld.fit(X_train, y=y)
+    X_predict = eval(str(X_predict))
+    ld.predict(X_predict)
     ld.score(y=y)
+
+    if save_dest:
+        save.pickle(ld, dest=save_dest)
 
     return ld
