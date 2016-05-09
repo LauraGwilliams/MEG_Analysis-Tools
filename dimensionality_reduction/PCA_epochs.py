@@ -1,46 +1,55 @@
-# run ICA on MEG data
+# run PCA on MEG data
 # Author: Laura Gwilliams (NYU)
 # Email: leg5@nyu.edu
-# Dependencies: scikitlearn, matplotlib
-# Version: 1- 26/04/16
+# Dependencies: scikitlearn, matplotlib, MNE-Python
+# Version: 2- 08/05/16
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.decomposition import PCA
-from eelbrain import load, combine
-from glob import glob
+import mne
 import numpy as np
 
-# load epochs from pickle ( all files in given directory )
-filedir = '/Volumes/LEG_2TB/Documents/Experiments/BP/barakeet_data/STG_TTG/dss_pickle/'
-dss = []
-files = glob('%s*pickled' % filedir)
-for f in files:
-    ds = load.unpickle(f)
-    # get the data down to 2 dims for the PCA
-    ds['srcm'] = ds['srcm'].sub(time=(0.0,0.2)).mean('time')
-    dss.append(ds)
-    del(ds)
-    print f
+# set up file directories to example MNE-Python data
+data_path = mne.datasets.sample.data_path()
+raw_fname = data_path + '/MEG/sample/sample_audvis_filt-0-40_raw.fif'
 
-# combine all ptps into one dataset and pull out the data
-ds = combine(dss)
-thisBool = ds['POD_distance_ms'] > 450
-ds = ds.sub(np.array(thisBool))
-dsX = ds['srcm'].x
+# determine size of epochs
+tmin, tmax = -0.0, 0.4
+event_id = dict(aud_l=1, vis_l=3)
+
+# load data and make epochs
+raw = mne.io.Raw(raw_fname, preload=True)
+events = mne.find_events(raw)
+epochs = mne.Epochs(raw=raw, events=events, event_id=event_id, tmin=tmin,
+                    tmax=tmax, preload=True, baseline=None)
+
+# pull out the data, average over time, and get data labels
+X = np.mean(epochs._data,2)
+y = epochs.events[:,2]
 
 # fit and apply the PCA
 pca = PCA(n_components=3)
-X_r = pca.fit(dsX).transform(dsX)
+X_r = pca.fit(X).transform(X)
 
-# plot 2D
-fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.scatter(X_r[:,0],X_r[:,1])
-plt.show()
+#-# plot 3D #-#
 
-# plot 3D
+# set up dictionaries for plotting colour and legend labels
+colour_dict = {'1':'r','3':'b'}
+leg_dict = {'1':'Auditory','3':'Visual'}
+
+# init figure
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-ax.scatter(X_r[:,0],X_r[:,1],X_r[:,2])
+
+# loop through each epoch and plot on 3D scatter
+for label_idx in xrange(0,len(y)):
+    ax.scatter(X_r[label_idx,0],X_r[label_idx,1],X_r[label_idx,2], marker='^',
+               c=colour_dict.get(str(y[label_idx])), s=40,
+               label=leg_dict.get(str(y[label_idx])) if label_idx < 2 else "_nolegend_")
+
+# add legend and show
+plt.legend(loc='upper left')
+plt.title('PCA: Auditory vs. Visual Stimuli')
+ax.set_xlabel('First PC'), ax.set_ylabel('Second PC'), ax.set_zlabel('Third PC')
 plt.show()

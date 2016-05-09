@@ -6,7 +6,7 @@ _Contact: leg5@nyu.edu_
 
 - Decoding properties of a stimulus from recorded MEG data.
 
-- Applying dimension reducing using PCA
+- Applying dimension reduction using PCA
 
 - Visualising results using multidimensional scaling (MDS)
 
