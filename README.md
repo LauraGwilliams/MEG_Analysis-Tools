@@ -6,7 +6,7 @@ These scripts primary utilise modules from _MNE-Python_ and _Scikit-learn_.
 ***
 
 ##### **/decoding**
-- Decoding properties of a stimulus from recorded MEG data
+- Decoding properties of a stimulus from MEG data
 
 ##### **/PCA**
 - Applying dimension reduction using PCA
