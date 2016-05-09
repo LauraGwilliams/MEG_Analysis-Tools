@@ -2,89 +2,130 @@
 # Author: Laura Gwilliams (NYU)
 # Email: leg5@nyu.edu
 # Dependencies: scikitlearn, matplotlib
-# Version: 1- 27/04/16
+# Latest version: 09/05/16
+
+# info about sample data: http://martinos.org/mne/dev/manual/sample_dataset.html
+
+# import Dependencies
+from __future__ import division
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.decomposition import PCA
-from eelbrain import load, combine
-from glob import glob
 import numpy as np
 from sklearn import manifold
 from sklearn.utils import check_random_state
 import time
+import mne
 
+# make function to find the nearest neighbour, and its index location
+def find_nearest(array,value):
+    """Gets the value and index of nearest value in an array."""
+    idx = (np.abs(array-value)).argmin()
+    return array[idx], idx
 
-tstart = 0
+# select epoch size and window size
+tstart = -0.1
 tstop = 0.5
-step_size = 0.02
+step_size = 0.04
 window_size = 0.04
 
-# load epochs from pickle ( all files in given directory )
-filedir = '/Volumes/LEG_2TB/Documents/Experiments/BP/barakeet_data/STG_TTG/dss_pickle/'
-# make an empty bin to populate w/ data
-dss = []
-# loop through each pickle file in the directory
-files = glob('%s*pickled' % filedir)
-for f in files:
-    ds = load.unpickle(f) # load up data
-    ds['srcm'] = ds['srcm'].sub(time=(tstart,tstop)) # subset time of interest
-    dss.append(ds) # add to bin
-    del(ds) # delete to reduce redundancy (because already added to bin)
-    print f # print file name
+# set up file directories to example MNE-Python data
+data_path = mne.datasets.sample.data_path()
+raw_fname = data_path + '/MEG/sample/sample_audvis_filt-0-40_raw.fif'
 
-# combine all ptps into one dataset and pull out the data
-ds = combine(dss)
+# load data and make epochs
+raw = mne.io.Raw(raw_fname, preload=True)
+events = mne.find_events(raw)
+event_id = dict(aud_l=1,aud_r=2,vis_l=3,vis_r=4) # trigger correspondance
+epochs = mne.Epochs(raw=raw, events=events, event_id=event_id, tmin=tstart,
+                    tmax=tstop, preload=True, baseline=(-0.1,None))
 
-# set var
-var_of_interest = 'low_high_surp'
+# equalize the number of epochs going into each average
+epochs = epochs.equalize_event_counts(event_id)[0]
 
-# aggregate over variable x subject
-ds_agg = ds.aggregate('{}{}'.format('subject%', var_of_interest),drop_bad=True)
+# pull out just data channels
+epochs.pick_types(stim=False)
 
-# load a label to subset
-thisLbl = mne.read_labels_from_annot('fsaverage',parc='aparc',hemi='lh',regexp='transverse',subjects_dir='/Volumes/LEG_2TB/Documents/Experiments/BP/data/mri')[0]
+# extract the data and get data labels
+X_epochs = epochs._data
+y = epochs.events[:,2]
 
-# get out item names
-try:
-    item_names = np.array(map(str,ds_agg[var_of_interest].as_labels()))
-except:
-    item_names = np.array(map(int,ds_agg[var_of_interest].x))
+# loop through each condition and make a new array with averages
+conditions = event_id.keys()
+conditions.sort() # put conditions in alphabetical order
+# preallocate space
+X = np.zeros([len(event_id), X_epochs.shape[1], X_epochs.shape[2]])
+# add condition average to X
+for condition_n in range(len(conditions)):
+    condition = conditions[condition_n]
+    X[condition_n,:,:] = epochs[condition].average().data
 
 # generate a colour for each unique variable
-unique_items = set(item_names)
-colours = np.random.rand(len(unique_items),3)
+colours = np.random.rand(len(conditions),3)
 
-# loop through time windows
+# create an array of times to loop through
 min_time_points = (tstart,tstop)
-for lower_lim in np.arange(min_time_points[0], min_time_points[1]-step_size, step_size):
-    dsX = ds_agg['srcm'].sub(source=thisLbl).sub(time=(lower_lim,lower_lim+window_size)).mean('source').x
-    print dsX.shape, lower_lim
+low_lim_ranges = np.arange(min_time_points[0], min_time_points[1]-step_size, step_size)
+number_of_plots = len(low_lim_ranges)
+
+# start subplot counter
+jj = 1
+
+# initiate figure
+fig = plt.figure(figsize=(20,8))
+
+# loop through each lower-lim time point
+for lower_lim in low_lim_ranges:
+
+    # find the value and index that is closest to the requested values that are
+    # present in the data. it may not be possible to give exactly what the user
+    # requests, depending on decimation of the data.
+    val_low, idx_low = find_nearest(epochs.times, lower_lim)
+    val_high, idx_high = find_nearest(epochs.times, lower_lim+window_size)
+
+    # subset the epoch data with just the time window of interest
+    X_sub = X[:,:,idx_low:idx_high]
+    # then, average over these timepoints
+    X_sub = np.mean(X_sub, 2)
 
     # fit mds
-    mds = manifold.MDS(2, max_iter=100, n_init=1, random_state=42, dissimilarity='euclidean')
-    trans_data = mds.fit_transform(dsX).T
+    mds = manifold.MDS(2, max_iter=100, n_init=1, random_state=42,
+                       n_jobs=1, dissimilarity='euclidean')
+    trans_data = mds.fit_transform(X_sub).T
 
-    # initiate figure
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+    # add subplot with two rows
+    ax = plt.subplot(2,round(number_of_plots/2),jj)
 
     # loop through and plot each variable
-    i = 0
-    for variable in unique_items:
-        # bool to subset data from just var of interest
-        boolean_list = np.array( ds_agg[var_of_interest] == str(variable))
-        ds_var = ds_agg.sub( boolean_list ) # subset labels
-        trans_data_sub = trans_data[:,boolean_list] # subset mds data
+    for nn in range(len(conditions)):
+        condition = conditions[nn]
+        # subset evoked response to just var of interest
+        trans_data_sub = trans_data[:,nn]
 
-        plt.scatter(trans_data_sub[0], trans_data_sub[1], c=colours[i], label=str(variable), cmap=plt.cm.rainbow)
-        i = i + 1
+        # plot responses as a scatter figure
+        plt.scatter(trans_data_sub[0]*(10**10), trans_data_sub[1]*(10**10), c=colours[nn],
+                    label=str(condition), cmap=plt.cm.rainbow, s=120, alpha=0.8)
 
-    ax.set_title('MDS: %s - %s ms' % (lower_lim*1000, (lower_lim+window_size)*1000))
-    ax.legend(title='%s' % var_of_interest)
+    # sort out title, xaxis, yaxis and ticks
+    subplot_title = ax.set_title('%sms - %sms' % (str(val_low*1000)[0:3], str(val_high*1000)[0:3]))
+    subplot_title.set_fontname('Arial'), subplot_title.set_fontsize(8)
+    ax.xaxis.set_visible(True)
+    plt.xticks(fontsize = 6),plt.yticks(fontsize = 6)
+    plt.locator_params(nbins=5)
+
+    # if it's the left-most plot of the subplot, keep the yaxis, otherwise make invisible
+    if jj != 1 and jj != int(round(number_of_plots/2)+1):
+        ax.yaxis.set_visible(False)
+
     plt.show(block=False)
     plt.draw()
 
-    # wait a short amount of time and then delete plot
-    time.sleep(1)
-    plt.close()
+    # update subplot counter
+    jj = jj + 1
+
+# add legend and overall title
+ax.legend(title='%s' % 'Stimuli Type', loc='center left', bbox_to_anchor=(1, 0.5),
+          fancybox=True, shadow=True)
+plt.suptitle('Timecourse of responses with MDS representation.')
+plt.show()

@@ -193,8 +193,8 @@ def scorer_spearman(y_true, y_pred):
     return rho
 
 def decode_MEG(X_train, y, categorical_continuous, scorer=mean_squared_error,
-                subset_labels=None, decoder=GeneralizationAcrossTime,
-                X_predict='X_train',save_dest=None):
+                decoder=GeneralizationAcrossTime, X_predict='X_train',
+                save_dest=None):
 
     """
     Runs GAT classifier on source or space data, on binary or continuous variables.
