@@ -1,4 +1,4 @@
-## __MNE Analysis Tools__
+## __MEG Analysis Tools__
 _Author: Laura Gwilliams (NYU)_  
 _Contact: leg5@nyu.edu_  
 
